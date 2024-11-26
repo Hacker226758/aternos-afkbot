@@ -1,59 +1,85 @@
-const mineflayer = require('mineflayer')
+const mineflayer = require('mineflayer');
 const fs = require('fs');
-let rawdata = fs.readFileSync('config.json');
-let data = JSON.parse(rawdata);
-var lasttime = -1;
-var moving = 0;
-var connected = 0;
-var actions = [ 'forward', 'back', 'left', 'right']
-var lastaction;
-var pi = 3.14159;
-var moveinterval = 2; // 2 second movement interval
-var maxrandom = 5; // 0-5 seconds added to movement interval (randomly)
-var host = data["ip"];
-var port = data["port"];
-var username = data["name"]
-var bot = mineflayer.createBot({
-  host: host,
-  port: port,
-  username: username
-});
-function getRandomArbitrary(min, max) {
-       return Math.random() * (max - min) + min;
 
+// Load configuration from config.json
+let config;
+try {
+  const rawdata = fs.readFileSync('config.json');
+  config = JSON.parse(rawdata);
+} catch (error) {
+  console.error('Error loading config.json:', error);
+  process.exit(1); // Exit if config loading fails
 }
-bot.on('login',function(){
-	console.log("Logged In")
+
+const { host, port, username } = config;
+
+// Bot creation with error handling
+let bot;
+try {
+  bot = mineflayer.createBot({
+    host,
+    port,
+    username,
+  });
+} catch (error) {
+  console.error('Error creating bot:', error);
+  process.exit(1);
+}
+
+
+// Constants and variables
+const actions = ['forward', 'back', 'left', 'right'];
+let lastAction = null;
+let lastTime = -1;
+const moveInterval = 2000; // Movement interval in milliseconds
+const maxRandomDelay = 5000; // Maximum random delay in milliseconds
+
+
+// Event handlers
+
+bot.on('login', () => {
+  console.log('Logged in!');
 });
-bot.on('time', function() {
-    if (connected <1) {
-        return;
-    }
-    if (lasttime<0) {
-        lasttime = bot.time.age;
+
+bot.on('error', (err) => {
+  console.error('Bot error:', err);
+});
+
+bot.on('end', (reason) => {
+  console.log('Disconnected:', reason);
+});
+
+bot.on('spawn', () => {
+  console.log('Spawned in the world!');
+  // Start movement after spawning
+  startMovement();
+});
+
+
+function getRandomDelay() {
+    return Math.random() * maxRandomDelay;
+}
+
+function startMovement() {
+    setInterval(() => {
+        moveBot();
+    }, moveInterval + getRandomDelay());
+}
+
+function moveBot() {
+    if (lastAction) {
+        bot.clearControlState(lastAction);
+        lastAction = null;
     } else {
-        var randomadd = Math.random() * maxrandom * 20;
-        var interval = moveinterval*20 + randomadd;
-        if (bot.time.age - lasttime > interval) {
-            if (moving == 1) {
-                bot.setControlState(lastaction,false);
-                moving = 0;
-                lasttime = bot.time.age;
-            } else {
-                var yaw = Math.random()*pi - (0.5*pi);
-                var pitch = Math.random()*pi - (0.5*pi);
-                bot.look(yaw,pitch,false);
-                lastaction = actions[Math.floor(Math.random() * actions.length)];
-                bot.setControlState(lastaction,true);
-                moving = 1;
-                lasttime = bot.time.age;
-                bot.activateItem();
-            }
-        }
+        const randomAction = actions[Math.floor(Math.random() * actions.length)];
+        bot.setControlState(randomAction, true);
+        lastAction = randomAction;
     }
-});
+}
 
-bot.on('spawn',function() {
-    connected=1;
-});
 
+
+// Keep the process running
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
